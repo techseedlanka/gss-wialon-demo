@@ -1,0 +1,139 @@
+{
+  "info": {
+    "_postman_id": "5ca0fc62-bc70-4c20-8da4-45643bf1565d",
+    "name": "Gajashakthi",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "48695530",
+    "_collection_link": "https://go.postman.co/collection/48695530-5ca0fc62-bc70-4c20-8da4-45643bf1565d?source=collection_link"
+  },
+  "item": [
+    {
+      "name": "Session",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "raw",
+          "raw": "",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "https://hst-api.wialon.com/wialon/ajax.html?svc=token/login&params={\"token\":\"828577d1ad4c4231b2b939032ad448a46F6C61E1F31B69C9816F9B79CB232B7799B51C50\"}",
+          "protocol": "https",
+          "host": [
+            "hst-api",
+            "wialon",
+            "com"
+          ],
+          "path": [
+            "wialon",
+            "ajax.html"
+          ],
+          "query": [
+            {
+              "key": "svc",
+              "value": "token/login"
+            },
+            {
+              "key": "params",
+              "value": "{\"token\":\"828577d1ad4c4231b2b939032ad448a46F6C61E1F31B69C9816F9B79CB232B7799B51C50\"}"
+            }
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Get Unit ID",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "raw",
+          "raw": "",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "https://hst-api.wialon.com/wialon/ajax.html?svc=core/search_items&params={\"spec\":{\"itemsType\":\"avl_unit\",\"propName\":\"sys_name\",\"propValueMask\":\"*\",\"sortType\":\"sys_name\"},\"force\":1,\"flags\":1025,\"from\":0,\"to\":0}&sid=03080b2c93ddc27e9532a9276bf3ed97",
+          "protocol": "https",
+          "host": [
+            "hst-api",
+            "wialon",
+            "com"
+          ],
+          "path": [
+            "wialon",
+            "ajax.html"
+          ],
+          "query": [
+            {
+              "key": "svc",
+              "value": "core/search_items"
+            },
+            {
+              "key": "params",
+              "value": "{\"spec\":{\"itemsType\":\"avl_unit\",\"propName\":\"sys_name\",\"propValueMask\":\"*\",\"sortType\":\"sys_name\"},\"force\":1,\"flags\":1025,\"from\":0,\"to\":0}"
+            },
+            {
+              "key": "sid",
+              "value": "03080b2c93ddc27e9532a9276bf3ed97"
+            }
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Get Device Position",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "raw",
+          "raw": "",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "https://hst-api.wialon.com/wialon/ajax.html?svc=core/search_item&params={\"id\":30212318,\"flags\":4194304}&sid=03080b2c93ddc27e9532a9276bf3ed97",
+          "protocol": "https",
+          "host": [
+            "hst-api",
+            "wialon",
+            "com"
+          ],
+          "path": [
+            "wialon",
+            "ajax.html"
+          ],
+          "query": [
+            {
+              "key": "svc",
+              "value": "core/search_item"
+            },
+            {
+              "key": "params",
+              "value": "{\"id\":30212318,\"flags\":4194304}"
+            },
+            {
+              "key": "sid",
+              "value": "03080b2c93ddc27e9532a9276bf3ed97"
+            }
+          ]
+        }
+      },
+      "response": []
+    }
+  ]
+}

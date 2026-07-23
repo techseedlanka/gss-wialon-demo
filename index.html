@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gajashakthi — GPS & Attendance Demo</title>
+  <meta name="description" content="Live GPS tracking and automated attendance dashboard powered by the Wialon telematics platform. Gajashakthi client demo.">
+  <meta name="robots" content="noindex">
+
+  <!-- Inter font -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+
+  <!-- Leaflet.js -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+
+  <!-- App styles -->
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<div class="app" id="app">
+
+  <!-- ══════════════════════════════════════════
+       LEFT SIDEBAR — Control Panel
+       ══════════════════════════════════════════ -->
+  <aside class="sidebar" id="sidebar">
+
+    <!-- Header -->
+    <div class="sidebar-header">
+      <div class="brand">
+        <div class="brand-icon">GPS</div>
+        <div class="brand-text">
+          <h1>Gajashakthi</h1>
+          <span>GPS &amp; Attendance Demo</span>
+        </div>
+      </div>
+      <div class="header-actions">
+        <button class="icon-btn" id="btn-theme" title="Toggle theme" aria-label="Toggle theme">
+          <i data-lucide="sun" id="icon-sun" style="display:none"></i>
+          <i data-lucide="moon" id="icon-moon"></i>
+        </button>
+      </div>
+    </div>
+
+    <!-- Connection status -->
+    <div class="status-bar">
+      <div class="status-dot status-dot--connecting" id="status-dot"></div>
+      <span class="status-text" id="status-text">Connecting to Wialon...</span>
+    </div>
+
+    <!-- Unit selector -->
+    <div class="unit-selector-wrap">
+      <label for="unit-select">Active Vehicle / Unit</label>
+      <select id="unit-select">
+        <option disabled selected>⏳ Loading vehicles...</option>
+      </select>
+    </div>
+
+    <!-- Feature Tabs -->
+    <div class="tabs" role="tablist">
+      <button class="tab active" data-tab="clockin" role="tab" aria-selected="true" id="tab-clockin" title="GPS Clock-In / Out">
+        <i data-lucide="user-check"></i>
+        <span>Clock-In</span>
+      </button>
+      <button class="tab" data-tab="daily" role="tab" aria-selected="false" id="tab-daily" title="Daily Travel Distance">
+        <i data-lucide="route"></i>
+        <span>Daily</span>
+      </button>
+      <button class="tab" data-tab="history" role="tab" aria-selected="false" id="tab-history" title="Travel History">
+        <i data-lucide="calendar-range"></i>
+        <span>History</span>
+      </button>
+      <button class="tab" data-tab="locations" role="tab" aria-selected="false" id="tab-locations" title="Location Master">
+        <i data-lucide="map-pin"></i>
+        <span>Locations</span>
+      </button>
+    </div>
+
+    <!-- Tab Panels -->
+    <div class="tab-panels">
+
+      <!-- ─── PANEL: Clock-In / Out ─── -->
+      <div class="tab-panel active" id="panel-clockin" role="tabpanel" aria-labelledby="tab-clockin">
+
+        <!-- Live location card -->
+        <div class="card live-card">
+          <div class="card-header">
+            <span class="live-badge">
+              <span class="pulse-dot"></span> LIVE
+            </span>
+            <span class="card-title">Current Position</span>
+          </div>
+          <div class="location-data">
+            <div class="data-row">
+              <span class="data-label">Latitude</span>
+              <span class="data-value" id="val-lat">—</span>
+            </div>
+            <div class="data-row">
+              <span class="data-label">Longitude</span>
+              <span class="data-value" id="val-lng">—</span>
+            </div>
+            <div class="data-row">
+              <span class="data-label">Speed</span>
+              <span class="data-value" id="val-speed">—</span>
+            </div>
+            <div class="data-row">
+              <span class="data-label">UTC Time</span>
+              <span class="data-value" id="val-time" style="font-size:11px">—</span>
+            </div>
+            <div class="data-row data-row--full">
+              <span class="data-label">Address</span>
+              <span class="data-value small" id="val-address">—</span>
+            </div>
+          </div>
+          <!-- Stationary verified badge -->
+          <div class="status-check" id="stationary-badge">
+            ✓ Stationary Check-In Verified
+          </div>
+        </div>
+
+        <!-- Clock-In button -->
+        <button class="btn btn--primary btn--pulse" id="btn-clockin">
+          <i data-lucide="user-check"></i>
+          Simulate Employee Clock-In
+        </button>
+
+        <!-- Attendance log -->
+        <div class="section-title">Attendance Log</div>
+        <div class="attendance-log" id="attendance-log">
+          <div class="empty-state">No entries yet — click Clock-In to begin.</div>
+        </div>
+      </div>
+
+      <!-- ─── PANEL: Daily Travel ─── -->
+      <div class="tab-panel" id="panel-daily" role="tabpanel" aria-labelledby="tab-daily">
+        <div class="form-group">
+          <label for="daily-date">Select Date</label>
+          <input type="date" id="daily-date" class="input">
+        </div>
+
+        <button class="btn btn--primary" id="btn-daily-travel">
+          <i data-lucide="route"></i>
+          View Daily Travel
+        </button>
+
+        <div class="stats-grid" id="daily-stats" style="display:none">
+          <div class="stat-card">
+            <div class="stat-value" id="daily-km">0</div>
+            <div class="stat-label">km traveled</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value" id="daily-pts">0</div>
+            <div class="stat-label">GPS points</div>
+          </div>
+        </div>
+
+        <div class="route-info" id="daily-route-info" style="display:none">
+          <div class="route-detail">
+            <span>🟢 Start</span>
+            <span id="daily-start">—</span>
+          </div>
+          <div class="route-detail">
+            <span>🔴 End</span>
+            <span id="daily-end">—</span>
+          </div>
+          <div class="route-detail">
+            <span>Duration</span>
+            <span id="daily-dur">—</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- ─── PANEL: Travel History ─── -->
+      <div class="tab-panel" id="panel-history" role="tabpanel" aria-labelledby="tab-history">
+        <div class="form-group">
+          <label for="hist-start">Start Date &amp; Time</label>
+          <input type="datetime-local" id="hist-start" class="input">
+        </div>
+        <div class="form-group">
+          <label for="hist-end">End Date &amp; Time</label>
+          <input type="datetime-local" id="hist-end" class="input">
+        </div>
+
+        <button class="btn btn--primary" id="btn-history">
+          <i data-lucide="calendar-range"></i>
+          Load Route History
+        </button>
+
+        <div class="stats-grid" id="hist-stats" style="display:none">
+          <div class="stat-card">
+            <div class="stat-value" id="hist-km">0</div>
+            <div class="stat-label">km total</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value" id="hist-pts">0</div>
+            <div class="stat-label">GPS points</div>
+          </div>
+        </div>
+
+        <div class="route-info" id="hist-route-info" style="display:none">
+          <div class="route-detail">
+            <span>🟢 Start</span>
+            <span id="hist-start-lbl">—</span>
+          </div>
+          <div class="route-detail">
+            <span>🔴 End</span>
+            <span id="hist-end-lbl">—</span>
+          </div>
+          <div class="route-detail">
+            <span>Duration</span>
+            <span id="hist-dur">—</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- ─── PANEL: Location Master ─── -->
+      <div class="tab-panel" id="panel-locations" role="tabpanel" aria-labelledby="tab-locations">
+        <div class="info-hint" id="picker-hint">
+          <i data-lucide="mouse-pointer-click"></i>
+          <span>Click anywhere on the map to drop a location pin. Drag to fine-tune.</span>
+        </div>
+
+        <div class="form-group">
+          <label for="loc-name">Location Name</label>
+          <input type="text" id="loc-name" class="input" placeholder="e.g. Head Office, Client Warehouse A">
+        </div>
+
+        <div class="form-group">
+          <label for="loc-radius">Geofence Radius (meters)</label>
+          <input type="number" id="loc-radius" class="input" value="100" min="10" max="10000">
+        </div>
+
+        <div class="coords-row">
+          <div class="form-group">
+            <label for="loc-lat">Latitude</label>
+            <input type="text" id="loc-lat" class="input" readonly placeholder="Click map…">
+          </div>
+          <div class="form-group">
+            <label for="loc-lng">Longitude</label>
+            <input type="text" id="loc-lng" class="input" readonly placeholder="Click map…">
+          </div>
+        </div>
+
+        <button class="btn btn--primary" id="btn-save-loc">
+          <i data-lucide="save"></i>
+          Save Location
+        </button>
+
+        <div class="section-title">Saved Locations</div>
+        <div class="location-list" id="location-list">
+          <div class="empty-state">No locations saved yet.</div>
+        </div>
+      </div>
+
+    </div><!-- /tab-panels -->
+
+    <!-- ─── Activity Log ─── -->
+    <div class="activity-log-wrap">
+      <div class="activity-log-header">
+        <i data-lucide="terminal"></i>
+        <span>API Log</span>
+        <button class="btn-clear" id="btn-clear-log" title="Clear log">Clear</button>
+      </div>
+      <div class="activity-log" id="activity-log"></div>
+    </div>
+
+  </aside><!-- /sidebar -->
+
+  <!-- ══════════════════════════════════════════
+       RIGHT PANEL — Interactive Map
+       ══════════════════════════════════════════ -->
+  <main class="map-container">
+    <!-- Leaflet map -->
+    <div id="map" role="application" aria-label="GPS tracking map"></div>
+
+    <!-- Mock data banner -->
+    <div class="map-banner" id="mock-banner">
+      <i data-lucide="alert-triangle"></i>
+      Live GPS data unavailable — showing demo route
+    </div>
+
+    <!-- Initial loading overlay -->
+    <div class="map-loading" id="map-loading">
+      <div class="loading-inner">
+        <div class="spinner"></div>
+        <p>Initialising GPS Dashboard…</p>
+      </div>
+    </div>
+  </main>
+
+</div><!-- /app -->
+
+<!-- App logic -->
+<script src="app.js" type="module"></script>
+</body>
+</html>
