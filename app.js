@@ -39,7 +39,7 @@ const CONFIG = {
       attr: '© <a href="https://www.openstreetmap.org/copyright" target="_blank">OSM</a> © <a href="https://carto.com/attributions" target="_blank">CARTO</a>',
     },
     light: {
-      url: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
+      url: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
       attr: '© <a href="https://www.openstreetmap.org/copyright" target="_blank">OSM</a> © <a href="https://carto.com/attributions" target="_blank">CARTO</a>',
     },
   },
@@ -172,11 +172,14 @@ class WialonAPI {
         sortType:      'sys_name',
       },
       force: 1,
-      flags: 1025,   // base data + last position
+      flags: 4611425, // Exhaustive flag (Base + lmsg + params + sensors)
       from:  0,
       to:    0,
     });
   }
+
+
+
 
   // ── Get a single item with real-time position ─────────────
   async searchItem(id, flags = 4194304) {
@@ -218,6 +221,105 @@ class WialonAPI {
 
     this.logger.warn('No messages found for selected range.');
     return [];
+  }
+
+  // ── Fetch Server-Side Report Data ─────────────────────────
+  async getReportData(unitId, timeFrom, timeTo) {
+    this.logger.info('Executing dynamic Wialon Report API…');
+    try {
+      // Find a resource to execute the report against (any resource works)
+      const res = await this.request('core/search_items', {
+        spec: { itemsType: 'avl_resource', propName: 'sys_name', propValueMask: '*', sortType: 'sys_name' },
+        force: 1, flags: 1, from: 0, to: 0
+      });
+      
+      const resId = res?.items?.[0]?.id;
+      if (!resId) {
+        this.logger.warn('No avl_resource found to execute reports.');
+        return null;
+      }
+      
+      const exec = await this.request('report/exec_report', {
+        reportResourceId: resId,
+        reportTemplateId: 0,
+        reportTemplate: {
+          id: 0, n: "Dynamic API Report", ct: "avl_unit", p: "",
+          tbl: [
+            {
+              n: "unit_trips", l: "Trips",
+              c: "time_begin,time_end,mileage",
+              cl: "Start,End,Mileage",
+              s: "", sl: "", p: "", f: 0,
+              sch: { f1: 0, f2: 0, t1: 0, t2: 0, m: 0, y: 0, w: 0 }
+            },
+            {
+              n: "unit_stays", l: "Parkings",
+              c: "time_begin,duration,location",
+              cl: "Start,Duration,Location",
+              s: "", sl: "", p: "", f: 0,
+              sch: { f1: 0, f2: 0, t1: 0, t2: 0, m: 0, y: 0, w: 0 }
+            }
+          ]
+        },
+        reportObjectId: unitId,
+        reportObjectSecId: 0,
+        interval: { flags: 16777216, from: timeFrom, to: timeTo }
+      });
+      
+      let totalMileage = 0;
+      let parkings = [];
+      
+      if (exec?.reportResult?.tables?.length > 0) {
+        for (let i = 0; i < exec.reportResult.tables.length; i++) {
+          const table = exec.reportResult.tables[i];
+          const name = table.n || table.name;
+          const rowsCount = table.r || table.rows || 0;
+          
+          if (rowsCount === 0) continue;
+          
+          const rows = await this.request('report/select_result_rows', {
+            tableIndex: i,
+            config: { type: "range", data: { from: 0, to: rowsCount - 1, level: 0 } }
+          });
+          
+          if (!Array.isArray(rows)) continue;
+
+          if (name === 'unit_trips') {
+            // Columns: 0: Start, 1: End, 2: Mileage
+            for (const row of rows) {
+              const cell = row.c[2];
+              const strVal = typeof cell === 'object' ? String(cell.t || cell.v || 0) : String(cell);
+              const km = parseFloat(strVal.replace(/[^\d.]/g, ''));
+              if (!isNaN(km)) totalMileage += km;
+            }
+          }
+          
+          if (name === 'unit_stays') {
+            // Columns: 0: Start (Unix), 1: Duration, 2: Location
+            for (const row of rows) {
+              const tUnix = typeof row.c[0] === 'object' ? row.c[0].v : 0;
+              const durStr = typeof row.c[1] === 'object' ? row.c[1].t : String(row.c[1] || '');
+              
+              const locCell = row.c[2];
+              const locStr = typeof locCell === 'object' ? locCell.t : String(locCell || '');
+              let lat = null, lng = null;
+              
+              if (typeof locCell === 'object' && locCell.y && locCell.x) {
+                lat = locCell.y; lng = locCell.x;
+              }
+              
+              parkings.push({ t: tUnix, duration: durStr, location: locStr, lat, lng });
+            }
+          }
+        }
+      }
+      
+      this.logger.success(`Report complete: ${totalMileage.toFixed(2)} km, ${parkings.length} parkings.`);
+      return { totalMileage, parkings };
+    } catch (err) {
+      this.logger.error(`Reporting API failed: ${err.message}`);
+      return null;
+    }
   }
 
   // ── Nominatim reverse geocoding ───────────────────────────
@@ -309,19 +411,22 @@ class MapController {
   }
 
   // ── Unit live marker ──────────────────────────────────────
-  setUnitMarker(lat, lng, name) {
+  setUnitMarker(lat, lng, name, acc) {
     if (this.unitMarker) this.map.removeLayer(this.unitMarker);
+    const engineHtml = acc !== undefined 
+      ? `<p style="margin-top:6px;font-size:11px;font-weight:700;color:${acc ? '#10b981' : '#ef4444'}">Engine: ${acc ? 'ON' : 'OFF'}</p>`
+      : '';
     this.unitMarker = L.marker([lat, lng], {
-      icon:           this._pulsingIcon('#00d4ff', 22),
+      icon:           this._pulsingIcon(acc === 0 ? '#ef4444' : '#00d4ff', 22),
       zIndexOffset:   1000,
     })
-      .bindPopup(`<b>${name}</b><p>Lat: ${lat.toFixed(5)}</p><p>Lng: ${lng.toFixed(5)}</p>`)
+      .bindPopup(`<b>${name}</b><p>Lat: ${lat.toFixed(5)}</p><p>Lng: ${lng.toFixed(5)}</p>${engineHtml}`)
       .addTo(this.map);
     this.map.flyTo([lat, lng], 14, { duration: 1.5 });
   }
 
   // ── Route polyline ────────────────────────────────────────
-  drawRoute(latlngs, color = '#00d4ff', fitBounds = true) {
+  drawRoute(latlngs, color = '#00d4ff', fitBounds = true, parkings = []) {
     this.clearRoute();
     if (latlngs.length < 2) return;
 
@@ -343,6 +448,18 @@ class MapController {
     }).bindPopup('<b>End Point</b>').addTo(this.map);
 
     this.routeDecorations = [startPin, endPin];
+
+    // Parkings
+    if (parkings.length > 0) {
+      parkings.forEach(p => {
+        if (p.lat && p.lng) {
+          const m = L.marker([p.lat, p.lng], {
+            icon: this._pinIcon('#3b82f6', 'P'),
+          }).bindPopup(`<b>Parking</b><br>Duration: ${p.duration}<br>${p.location}`).addTo(this.map);
+          this.routeDecorations.push(m);
+        }
+      });
+    }
 
     if (fitBounds) {
       this.map.fitBounds(this.routeLayer.getBounds(), { padding: [40, 40], maxZoom: 16 });
@@ -566,15 +683,21 @@ class TravelModule {
   // ── Extract GPS points and compute distance ───────────────
   processMessages(messages) {
     const pts = messages
-      .filter(m => m.pos?.y && m.pos?.x)
+      .filter(m => m.pos?.y && m.pos?.x && (m.pos.sc === undefined || m.pos.sc >= 3))
       .map(m => ({ lat: m.pos.y, lng: m.pos.x, t: m.t ?? 0, s: m.pos.s ?? 0 }))
       .sort((a, b) => a.t - b.t);
 
     let dist = 0;
     for (let i = 1; i < pts.length; i++) {
       const d = this.haversine(pts[i - 1].lat, pts[i - 1].lng, pts[i].lat, pts[i].lng);
-      // Sanity-check: ignore jumps > 150 km between consecutive points (GPS glitch/teleport)
-      if (d < 150) dist += d;
+      
+      // Filter 1: Ignore massive jumps (teleports > 150km)
+      if (d > 150) continue;
+      
+      // Filter 2: Ignore GPS jitter when parked (speed < 3 km/h AND tiny movement < 0.015 km)
+      if (pts[i].s < 3 && d < 0.015) continue;
+      
+      dist += d;
     }
     return { pts, dist };
   }
@@ -616,23 +739,35 @@ class TravelModule {
       const tt    = Math.floor(end.getTime()   / 1000);
 
       const messages = await this.api.loadMessages(unitId, tf, tt);
-      const { pts, dist } = this.processMessages(messages);
+      const { pts, dist: mathDist } = this.processMessages(messages);
+      
+      const repData = await this.api.getReportData(unitId, tf, tt);
+      const finalDist = repData?.totalMileage > 0 ? repData.totalMileage : mathDist;
+      const parkings = repData?.parkings || [];
 
       if (pts.length < 2) {
         throw new Error('No travel data available for this unit on the selected date.');
       }
+      
+      // Match parking coords to nearest GPS point if Wialon omitted the literal {x,y}
+      parkings.forEach(p => {
+        if (!p.lat && p.t) {
+          const nearest = pts.find(pt => pt.t >= p.t) || pts[pts.length - 1];
+          if (nearest) { p.lat = nearest.lat; p.lng = nearest.lng; }
+        }
+      });
 
-      this.map.drawRoute(pts.map(p => [p.lat, p.lng]), '#00d4ff');
+      this.map.drawRoute(pts.map(p => [p.lat, p.lng]), '#00d4ff', true, parkings);
 
       // Update UI
       document.getElementById('daily-stats').style.display = 'grid';
-      document.getElementById('daily-km').textContent  = dist.toFixed(2);
+      document.getElementById('daily-km').textContent  = finalDist.toFixed(2);
       document.getElementById('daily-pts').textContent = pts.length;
       document.getElementById('daily-route-info').style.display = 'block';
       document.getElementById('daily-start').textContent = this._fmtTime(pts[0]?.t);
       document.getElementById('daily-end').textContent   = this._fmtTime(pts[pts.length - 1]?.t);
       document.getElementById('daily-dur').textContent   = this._duration(pts[0]?.t, pts[pts.length - 1]?.t);
-      this.logger.success(`Daily travel: ${dist.toFixed(2)} km over ${pts.length} points.`);
+      this.logger.success(`Daily travel drawn. Map rendering complete.`);
     } catch (err) {
       this.logger.error(`Daily travel error: ${err.message}`);
     } finally {
@@ -653,16 +788,27 @@ class TravelModule {
       if (tf >= tt) throw new Error('Start date/time must be before end date/time.');
 
       const messages = await this.api.loadMessages(unitId, tf, tt);
-      const { pts, dist } = this.processMessages(messages);
+      const { pts, dist: mathDist } = this.processMessages(messages);
+      
+      const repData = await this.api.getReportData(unitId, tf, tt);
+      const finalDist = repData?.totalMileage > 0 ? repData.totalMileage : mathDist;
+      const parkings = repData?.parkings || [];
 
       if (pts.length < 2) {
         throw new Error('No travel data available for this unit in the selected timeframe.');
       }
+      
+      parkings.forEach(p => {
+        if (!p.lat && p.t) {
+          const nearest = pts.find(pt => pt.t >= p.t) || pts[pts.length - 1];
+          if (nearest) { p.lat = nearest.lat; p.lng = nearest.lng; }
+        }
+      });
 
-      this.map.drawRoute(pts.map(p => [p.lat, p.lng]), '#f59e0b');
+      this.map.drawRoute(pts.map(p => [p.lat, p.lng]), '#f59e0b', true, parkings);
 
       document.getElementById('hist-stats').style.display = 'grid';
-      document.getElementById('hist-km').textContent  = dist.toFixed(2);
+      document.getElementById('hist-km').textContent  = finalDist.toFixed(2);
       document.getElementById('hist-pts').textContent = pts.length;
 
       document.getElementById('hist-route-info').style.display   = 'block';
@@ -845,7 +991,7 @@ class App {
         const first = result.items[0];
         const pos   = first?.pos || first?.lmsg?.pos;
         if (pos?.y && pos?.x) {
-          this.mapCtrl.setUnitMarker(pos.y, pos.x, first.nm);
+          this.mapCtrl.setUnitMarker(pos.y, pos.x, first.nm, first?.lmsg?.p?.acc);
         }
       } else {
         this._status('connected', 'Connected · No units available');
@@ -864,12 +1010,24 @@ class App {
 
   _populateUnits(units) {
     const sel = document.getElementById('unit-select');
-    sel.innerHTML = units.map(u => `<option value="${u.id}">${u.nm}</option>`).join('');
+    sel.innerHTML = units.map(u => {
+      const p = u?.lmsg?.p || {};
+      const prms = u?.prms || {};
+      
+      const getVal = (key) => p[key] ?? prms[key]?.v ?? prms[key];
+      const acc = getVal('acc') ?? getVal('in1') ?? getVal('in4') ?? getVal('engine_ignition') ?? getVal('di1');
+      
+      let icon = '⚪ ';
+      if (acc == 1) icon = '🟢 ';
+      else if (acc == 0) icon = '🔴 ';
+      return `<option value="${u.id}">${icon}${u.nm}</option>`;
+    }).join('');
+    
     sel.addEventListener('change', () => {
       const unit = units.find(u => u.id === parseInt(sel.value, 10));
       this.logger.info(`Unit selected: ${unit?.nm ?? 'Unknown'}`);
       const pos = unit?.pos || unit?.lmsg?.pos;
-      if (pos?.y && pos?.x) this.mapCtrl.setUnitMarker(pos.y, pos.x, unit.nm);
+      if (pos?.y && pos?.x) this.mapCtrl.setUnitMarker(pos.y, pos.x, unit.nm, unit?.lmsg?.p?.acc);
     });
   }
 

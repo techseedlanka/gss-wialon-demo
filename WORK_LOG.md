@@ -36,3 +36,9 @@ Build a client-ready demo dashboard integrating with the Wialon REST API to show
 - User should generate a fresh Wialon permanent token (without IP restriction) from their Wialon account
 - Replace the token in `app.js` CONFIG.TOKEN
 - Deploy to Vercel: `vercel --prod`
+
+## 2026-07-23 - Wialon API Enhancements
+- Added Engine ON/OFF tracking to dashboard.
+- Implemented dynamic Wialon Reporting API to fetch exact trip mileage and parking coordinates.
+- Fixed GPS drift trails using satellite count filter.
+
