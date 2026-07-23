@@ -573,8 +573,8 @@ class TravelModule {
     let dist = 0;
     for (let i = 1; i < pts.length; i++) {
       const d = this.haversine(pts[i - 1].lat, pts[i - 1].lng, pts[i].lat, pts[i].lng);
-      // Sanity-check: ignore jumps > 2 km between consecutive points (GPS noise)
-      if (d < 2) dist += d;
+      // Sanity-check: ignore jumps > 150 km between consecutive points (GPS glitch/teleport)
+      if (d < 150) dist += d;
     }
     return { pts, dist };
   }
