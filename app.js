@@ -579,19 +579,6 @@ class TravelModule {
     return { pts, dist };
   }
 
-  // ── Generate mock route for fallback demos ────────────────
-  generateMockRoute(centerLat, centerLng, n = 35) {
-    const pts = [];
-    let lat = centerLat + (Math.random() - 0.5) * 0.03;
-    let lng = centerLng + (Math.random() - 0.5) * 0.03;
-    const now = Math.floor(Date.now() / 1000);
-    for (let i = 0; i < n; i++) {
-      lat += (Math.random() - 0.5) * 0.005;
-      lng += (Math.random() - 0.5) * 0.005;
-      pts.push({ lat, lng, t: now - (n - i) * 120, s: Math.floor(Math.random() * 60) });
-    }
-    return pts;
-  }
 
   // ── Helpers ───────────────────────────────────────────────
   _fmtTime(unix) { return unix ? new Date(unix * 1000).toLocaleTimeString() : '—'; }
@@ -614,14 +601,6 @@ class TravelModule {
     if (!loading) lucide.createIcons({ attrs: { 'stroke-width': 2 } });
   }
 
-  async _getFallbackCenter(unitId) {
-    try {
-      const r = await this.api.searchItem(unitId, 4194304);
-      const pos = r?.item?.pos || r?.item?.lmsg?.pos;
-      if (pos?.y) return [pos.y, pos.x];
-    } catch (_) { /* ignore */ }
-    return CONFIG.DEFAULT_CENTER;
-  }
 
   // ── Feature 2: Daily Travel ───────────────────────────────
   async loadDailyTravel(unitId, dateStr) {
@@ -637,16 +616,10 @@ class TravelModule {
       const tt    = Math.floor(end.getTime()   / 1000);
 
       const messages = await this.api.loadMessages(unitId, tf, tt);
-      let { pts, dist } = this.processMessages(messages);
-      let isMock = false;
+      const { pts, dist } = this.processMessages(messages);
 
       if (pts.length < 2) {
-        this.logger.warn('Insufficient GPS data — generating demo route for presentation.');
-        const [cLat, cLng] = await this._getFallbackCenter(unitId);
-        pts   = this.generateMockRoute(cLat, cLng, 35);
-        dist  = pts.slice(1).reduce((acc, p, i) =>
-          acc + this.haversine(pts[i].lat, pts[i].lng, p.lat, p.lng), 0);
-        isMock = true;
+        throw new Error('No travel data available for this unit on the selected date.');
       }
 
       this.map.drawRoute(pts.map(p => [p.lat, p.lng]), '#00d4ff');
@@ -659,8 +632,6 @@ class TravelModule {
       document.getElementById('daily-start').textContent = this._fmtTime(pts[0]?.t);
       document.getElementById('daily-end').textContent   = this._fmtTime(pts[pts.length - 1]?.t);
       document.getElementById('daily-dur').textContent   = this._duration(pts[0]?.t, pts[pts.length - 1]?.t);
-
-      if (isMock) document.getElementById('mock-banner').classList.add('show');
       this.logger.success(`Daily travel: ${dist.toFixed(2)} km over ${pts.length} points.`);
     } catch (err) {
       this.logger.error(`Daily travel error: ${err.message}`);
@@ -682,16 +653,10 @@ class TravelModule {
       if (tf >= tt) throw new Error('Start date/time must be before end date/time.');
 
       const messages = await this.api.loadMessages(unitId, tf, tt);
-      let { pts, dist } = this.processMessages(messages);
-      let isMock = false;
+      const { pts, dist } = this.processMessages(messages);
 
       if (pts.length < 2) {
-        this.logger.warn('Insufficient GPS data — generating demo route for presentation.');
-        const [cLat, cLng] = await this._getFallbackCenter(unitId);
-        pts   = this.generateMockRoute(cLat, cLng, 50);
-        dist  = pts.slice(1).reduce((acc, p, i) =>
-          acc + this.haversine(pts[i].lat, pts[i].lng, p.lat, p.lng), 0);
-        isMock = true;
+        throw new Error('No travel data available for this unit in the selected timeframe.');
       }
 
       this.map.drawRoute(pts.map(p => [p.lat, p.lng]), '#f59e0b');
@@ -704,8 +669,6 @@ class TravelModule {
       document.getElementById('hist-start-lbl').textContent = new Date(tf * 1000).toLocaleString();
       document.getElementById('hist-end-lbl').textContent   = new Date(tt * 1000).toLocaleString();
       document.getElementById('hist-dur').textContent       = this._duration(tf, tt);
-
-      if (isMock) document.getElementById('mock-banner').classList.add('show');
       this.logger.success(`History: ${dist.toFixed(2)} km over ${pts.length} points.`);
     } catch (err) {
       this.logger.error(`History error: ${err.message}`);
